@@ -2,6 +2,7 @@ services:
   - type: web
     name: doctor-scheduler-web
     env: python
+    plan: free
     buildCommand: "./build.sh"
     startCommand: "gunicorn doctor_scheduler.wsgi:application"
     envVars:
