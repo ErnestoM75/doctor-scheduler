@@ -104,3 +104,68 @@ def ai_book_appointment(request):
         return JsonResponse({"status": "success", "message": f"Successfully booked for {confirmed_time}!"})
     except Exception as e:
         return JsonResponse({"status": "error", "message": f"Could not book appointment: {str(e)}"})
+
+@csrf_exempt
+def process_queue_webhook(request):
+    """GitHub Actions hits this every 10 minutes to process the queue natively."""
+    from core.services import discover_clinics_for_form
+    from twilio.rest import Client
+    
+    # 1. Scrape Clinics
+    pending_forms = IntakeForm.objects.filter(status='pending')
+    for form in pending_forms:
+        form.status = 'searching'
+        form.save()
+        clinics_found = discover_clinics_for_form(form)
+        if clinics_found > 0:
+            form.status = 'queued'
+        else:
+            form.status = 'failed_search'
+        form.save()
+        
+    # 2. Trigger Calls
+    queued_forms = IntakeForm.objects.filter(status='queued')
+    account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+    from_number = os.environ.get("TWILIO_PHONE_NUMBER")
+    
+    domain = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+    if not domain:
+        try:
+            import requests
+            res = requests.get('http://127.0.0.1:4040/api/tunnels', timeout=2)
+            domain = res.json()['tunnels'][0]['public_url']
+        except:
+            pass
+            
+    if not domain:
+        return JsonResponse({"status": "error", "msg": "No domain found"})
+        
+    if not domain.startswith('http'):
+        domain = f"https://{domain}"
+
+    calls_made = 0
+    if account_sid and auth_token:
+        client = Client(account_sid, auth_token)
+        for form in queued_forms:
+            clinic = form.clinics.filter(call_status='pending').first()
+            if clinic:
+                try:
+                    client.calls.create(
+                        to=clinic.phone_number,
+                        from_=from_number,
+                        url=f"{domain}/twilio/twiml/?ff_id={form.firefighter.id}&clinic_id={clinic.id}"
+                    )
+                    clinic.call_status = 'calling'
+                    clinic.save()
+                    form.status = 'calling'
+                    form.save()
+                    calls_made += 1
+                except Exception as e:
+                    clinic.call_status = 'failed'
+                    clinic.save()
+            else:
+                form.status = 'failed'
+                form.save()
+                
+    return JsonResponse({"status": "success", "calls_made": calls_made})

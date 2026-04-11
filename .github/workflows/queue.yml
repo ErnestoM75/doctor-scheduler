@@ -1,0 +1,14 @@
+name: Queue Processor
+
+on:
+  schedule:
+    # Ping every 10 minutes, Monday-Friday, 13:00 to 23:00 UTC (8am-5pm EST)
+    - cron: '*/10 13-23 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  ping-queue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Webhook
+        run: curl -s -X POST ${{ secrets.CRON_URL }}
