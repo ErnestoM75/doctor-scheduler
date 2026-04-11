@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firefighter Medical Intake</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --surface-color: rgba(30, 41, 59, 0.7);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --accent: #10b981;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: var(--surface-color);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            margin-top: 2rem;
+            height: fit-content;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #60a5fa, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        p.subtitle { color: var(--text-muted); margin-bottom: 2rem; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.9rem; color: #cbd5e1; }
+        input[type="text"], input[type="date"], input[type="time"] {
+            width: 100%; padding: 0.75rem; border-radius: 8px;
+            background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color);
+            color: white; font-family: inherit; box-sizing: border-box;
+        }
+        .checkbox-group { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; }
+        .checkbox-item { display: flex; align-items: center; gap: 0.5rem; }
+        .time-group { display: flex; gap: 1rem; }
+        .time-group > div { flex: 1; }
+        
+        button {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: white; border: none; padding: 1rem; width: 100%;
+            border-radius: 12px; font-size: 1.1rem; font-weight: 700;
+            cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 1rem;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3); }
+        .success-state { display: none; text-align: center; padding: 2rem 0; }
+        .success-state svg { color: var(--accent); width: 64px; height: 64px; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container" id="form-container">
+        <h1>Medical Appointment Intake</h1>
+        <p class="subtitle">Fill out your details. Our AI will automatically find clinics near you and broker the appointment securely.</p>
+        
+        <form id="intake-form">
+            <div class="form-group">
+                <label>Target Medical Exam Type</label>
+                <input type="text" id="search_query" value="DOT medical exams" required>
+            </div>
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="name" placeholder="John Doe" required>
+            </div>
+            <div class="form-group">
+                <label>Date of Birth</label>
+                <input type="text" id="dob" placeholder="e.g. Jan 15, 1990" required>
+            </div>
+            <div class="form-group">
+                <label>Home Address (For Clinic Search)</label>
+                <input type="text" id="address" placeholder="123 Main St, Springfield, IL" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Available Days</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-item"><input type="checkbox" name="days" value="Monday"> Mon</label>
+                    <label class="checkbox-item"><input type="checkbox" name="days" value="Tuesday"> Tue</label>
+                    <label class="checkbox-item"><input type="checkbox" name="days" value="Wednesday"> Wed</label>
+                    <label class="checkbox-item"><input type="checkbox" name="days" value="Thursday"> Thu</label>
+                    <label class="checkbox-item"><input type="checkbox" name="days" value="Friday"> Fri</label>
+                </div>
+            </div>
+            
+            <div class="time-group form-group">
+                <div>
+                    <label>Available From</label>
+                    <input type="time" id="time_start" value="08:00" required>
+                </div>
+                <div>
+                    <label>Available Until</label>
+                    <input type="time" id="time_end" value="17:00" required>
+                </div>
+            </div>
+
+            <button type="submit">Submit to AI Scheduler</button>
+        </form>
+    </div>
+
+    <div class="container success-state" id="success-container">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <h1>Intake Received</h1>
+        <p class="subtitle">You are now in the AI queue! As soon as clinics open, our AI agent will call them, negotiate a time fitting your schedule, and secure your booking automatically.</p>
+    </div>
+
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        document.getElementById('intake-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const days = Array.from(document.querySelectorAll('input[name="days"]:checked')).map(cb => cb.value);
+            if(days.length === 0) { alert('Please select at least one available day.'); return; }
+
+            const payload = {
+                search_query: document.getElementById('search_query').value,
+                name: document.getElementById('name').value,
+                dob: document.getElementById('dob').value,
+                address: document.getElementById('address').value,
+                available_days: days,
+                time_start: document.getElementById('time_start').value,
+                time_end: document.getElementById('time_end').value
+            };
+
+            const btn = e.target.querySelector('button');
+            const originalText = btn.innerText;
+            btn.innerText = "Submitting...";
+            
+            try {
+                const res = await fetch('/submit-intake/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if(data.status === 'success') {
+                    document.getElementById('form-container').style.display = 'none';
+                    document.getElementById('success-container').style.display = 'block';
+                } else {
+                    alert('Error: ' + data.msg);
+                    btn.innerText = originalText;
+                }
+            } catch (err) {
+                alert('Connection error');
+                btn.innerText = originalText;
+            }
+        });
+    </script>
+</body>
+</html>

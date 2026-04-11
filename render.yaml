@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: doctor-scheduler-web
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn doctor_scheduler.wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: WEB_CONCURRENCY
+        value: 4
+
+  - type: worker
+    name: doctor-scheduler-queue
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "python manage.py run_scheduler"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
