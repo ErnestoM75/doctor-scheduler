@@ -4,6 +4,7 @@ class Firefighter(models.Model):
     name = models.CharField(max_length=100)
     dob = models.CharField(max_length=50, blank=True) # string for flexibility like 'Jan 1, 1990'
     address = models.CharField(max_length=255, blank=True)
+    phone_number = models.CharField(max_length=20, blank=True) # For SMS notifications
     elevenlabs_id = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
