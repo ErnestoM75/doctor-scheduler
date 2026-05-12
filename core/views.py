@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import Firefighter, IntakeForm, Appointment, DiscoveredClinic
+from .models import Firefighter, IntakeForm, Appointment, DiscoveredClinic, Clinic
 import json
 import os
 
@@ -168,30 +168,73 @@ RULES:
 </Response>"""
         return HttpResponse(fallback, content_type='text/xml')
 
+@csrf_exempt
+def twilio_call_status(request):
+    """Twilio pings this when a call completes. If no booking was made, call the next clinic."""
+    from .services import try_next_clinic
+
+    ff_id = request.GET.get('ff_id')
+    clinic_id = request.GET.get('clinic_id')
+    call_status = request.POST.get('CallStatus', '')
+
+    print(f"DEBUG call-status: ff={ff_id} clinic={clinic_id} status={call_status}")
+
+    if not (ff_id and clinic_id):
+        return HttpResponse('ok')
+
+    clinic = DiscoveredClinic.objects.filter(id=clinic_id).first()
+    if not clinic:
+        return HttpResponse('ok')
+
+    form = clinic.intake_form
+    booked = Appointment.objects.filter(clinic=clinic, firefighter_id=ff_id).exists()
+
+    if booked:
+        clinic.call_status = 'success'
+        clinic.save()
+        form.status = 'success'
+        form.save()
+        print(f"DEBUG call-status: Booking confirmed for {clinic.name}. Stopping queue.")
+        return HttpResponse('ok')
+
+    # No booking yet — mark this clinic and try the next one
+    clinic.call_status = 'no_answer' if call_status in ('no-answer', 'busy', 'failed', 'canceled') else 'failed'
+    clinic.save()
+    print(f"DEBUG call-status: No booking at {clinic.name} ({call_status}). Trying next clinic.")
+    try_next_clinic(form)
+
+    return HttpResponse('ok')
+
+
 # --- ELEVENLABS AI TOOL WEBHOOKS ---
 
 @csrf_exempt
 def ai_get_availability(request):
     """ElevenLabs Tool: AI calls this to find out when the FF is free."""
     body = json.loads(request.body.decode('utf-8')) if request.body else {}
-    ff_id = body.get('firefighter_id', 1)
-    clinic_id = body.get('clinic_id', '')
-    
+    raw_ff_id = request.GET.get('firefighter_id') or body.get('firefighter_id', 1)
+    clinic_id = request.GET.get('clinic_id') or request.GET.get('clininc_id') or body.get('clinic_id', '')
+    try:
+        ff_id = int(raw_ff_id)
+    except (ValueError, TypeError):
+        ff_id = 1
+
     try:
         ff = Firefighter.objects.get(id=ff_id)
-        # Get their active intake form
         form = IntakeForm.objects.filter(firefighter=ff).latest('created_at')
-        
-        # Fetch clinic info if available to give AI better context
+
         clinic_name = "the clinic"
         clinic_address = "the address provided"
+        clinic_instructions = ""
         if clinic_id:
-            try:
-                clinic = DiscoveredClinic.objects.get(id=clinic_id)
-                clinic_name = clinic.name
-                clinic_address = clinic.address
-            except DiscoveredClinic.DoesNotExist:
-                pass
+            discovered = DiscoveredClinic.objects.filter(id=clinic_id).first()
+            if discovered:
+                clinic_name = discovered.name
+                clinic_address = discovered.address
+                # Look up the directory entry for per-clinic instructions
+                directory_clinic = Clinic.objects.filter(name=discovered.name).first()
+                if directory_clinic and directory_clinic.agent_instructions:
+                    clinic_instructions = directory_clinic.agent_instructions
 
         name = ff.name
         dob = str(ff.dob)
@@ -208,8 +251,11 @@ def ai_get_availability(request):
             "time_end": t_end,
             "patient_name": name,
             "patient_dob": dob,
+            "clinic_name": clinic_name,
+            "clinic_address": clinic_address,
+            "clinic_instructions": clinic_instructions,
         }
-        print(f"DEBUG: AI Tool get_availability for FF {ff_id}: days={days}, {t_start}-{t_end}")
+        print(f"DEBUG: AI Tool get_availability for FF {ff_id}: days={days}, {t_start}-{t_end}, clinic={clinic_name}")
         return JsonResponse(resp_data)
     except Exception as e:
         print(f"DEBUG: AI Tool get_availability ERROR: {e}")
